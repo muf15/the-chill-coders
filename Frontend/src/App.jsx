@@ -27,6 +27,7 @@ import Predictionchat from "./components/aitanissa/Predictionchat";
 import Leavechat from "./components/aitanissa/Leavechat";
 import HealthRecordForm from "./components/Healthrecordform/HealthRecordForm";
 import DoctorInsightsChat from "./components/aitanissa/DoctorInsightsChat";
+import DoctorTimeSlotSelector from "./components/Booking/DoctorTimeSlotSelector";
 const Home = () => <div className="text-center mt-10">🏠 Welcome to Home</div>;
 const AIBot = () => <div className="text-center mt-10">🤖 AI Bot Page</div>;
 

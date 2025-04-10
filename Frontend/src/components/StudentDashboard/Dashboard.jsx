@@ -1,172 +1,275 @@
-import React from 'react';
-import { LineChart, Line, PieChart, Pie, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
-import { Bell, Settings, Search } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { api } from "../../axios.config.js"; // Axios instance
+import { Link } from 'react-router-dom';
+import { Bell, Settings, Search, Upload, Calendar, FileText, MessageCircle } from "lucide-react";
 
 const Dashboard = () => {
-  // Weekly activity data
-  const weeklyData = [
-    { day: 'Sat', patients: 45, surgeries: 22 },
-    { day: 'Sun', patients: 32, surgeries: 15 },
-    { day: 'Mon', patients: 38, surgeries: 25 },
-    { day: 'Tue', patients: 42, surgeries: 28 },
-    { day: 'Wed', patients: 35, surgeries: 20 },
-    { day: 'Thu', patients: 40, surgeries: 24 },
-    { day: 'Fri', patients: 38, surgeries: 26 }
-  ];
+  const [healthRecords, setHealthRecords] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [appointmentsError, setAppointmentsError] = useState(null);
+  const [selectedRecord, setSelectedRecord] = useState(null); // State for selected record
 
-  // Department statistics
-  const departmentData = [
-    { name: 'Cardiology', value: 30 },
-    { name: 'Neurology', value: 35 },
-    { name: 'Pediatrics', value: 20 },
-    { name: 'Orthopedics', value: 15 }
-  ];
+  // Fetch health records
+  useEffect(() => {
+    const fetchHealthRecords = async () => {
+      try {
+        const response = await api.get("/health-record");
+        if (Array.isArray(response.data)) {
+          setHealthRecords(response.data);
+        } else {
+          console.error("Unexpected response format:", response.data);
+          setHealthRecords([]);
+        }
+      } catch (err) {
+        console.error("Error fetching health records:", err);
+        setError("Failed to load health records.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Recent patients data
-  const recentPatients = [
-    { name: 'Sarah Johnson', date: '28 January 2024', type: 'Emergency', amount: '-$850' },
-    { name: 'Mike Peters', date: '25 January 2024', type: 'Checkup', amount: '+$2,500' },
-    { name: 'Emma Wilson', date: '21 January 2024', type: 'Surgery', amount: '+$5,400' }
-  ];
+    fetchHealthRecords();
+  }, []);
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+  // Fetch student appointments
+  useEffect(() => {
+    const fetchStudentAppointments = async () => {
+      try {
+        const response = await api.get("/api/v1/appointment/student?status=pending");
+        if (Array.isArray(response.data)) {
+          setAppointments(response.data);
+        } else if (response.data && Array.isArray(response.data.appointments)) {
+          setAppointments(response.data.appointments);
+        } else {
+          console.error("Unexpected appointment response format:", response.data);
+          setAppointments([]);
+        }
+      } catch (err) {
+        console.error("Error fetching student appointments:", err);
+        setAppointmentsError("Failed to load student appointments.");
+      } finally {
+        setAppointmentsLoading(false);
+      }
+    };
+
+    fetchStudentAppointments();
+  }, []);
+
+  const viewHealthRecordDetails = async (id) => {
+    try {
+      const response = await api.get(`/health-record/${id}`);
+      setSelectedRecord(response.data); // Update state with selected record details
+    } catch (err) {
+      console.error("Error fetching health record details:", err);
+      alert("Failed to load health record details.");
+    }
+  };
+
+  const deleteHealthRecord = async (id) => {
+    try {
+      const confirmDelete = window.confirm("Are you sure you want to delete this record?");
+      if (!confirmDelete) return;
+
+      await api.delete(`/health-record/${id}/delete`);
+      alert("Health record deleted successfully.");
+      setHealthRecords(healthRecords.filter((record) => record._id !== id));
+    } catch (err) {
+      console.error("Error deleting health record:", err);
+      alert("Failed to delete health record.");
+    }
+  };
+
+  // Function to format date
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Get the next upcoming appointment (for the action button history)
+  const getNextAppointment = () => {
+    if (appointments.length === 0) return "No upcoming appointments";
+    
+    const sortedAppointments = [...appointments].sort((a, b) => 
+      new Date(a.date) - new Date(b.date)
+    );
+    
+    const now = new Date();
+    const upcomingAppointment = sortedAppointments.find(apt => 
+      new Date(apt.date) > now
+    );
+    
+    if (upcomingAppointment) {
+      return `Next appointment: ${formatDate(upcomingAppointment.date)} - ${upcomingAppointment.doctorName || 'Doctor'}`;
+    } else {
+      return "No upcoming appointments";
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
       <div className="w-64 bg-white p-4 border-r">
-        <div className="flex items-center mb-8">
-          <div className="text-xl font-bold text-blue-600">MediSense</div>
-        </div>
-        
+        <h2 className="text-xl font-bold text-blue-600 mb-6">MediSense</h2>
         <nav className="space-y-2">
-          <div className="flex items-center px-4 py-2 text-blue-600 bg-blue-50 rounded">
-            <span className="ml-2">Dashboard</span>
-          </div>
-          {['Appointments', 'Patients', 'Doctors', 'Departments', 'Analytics', 'Reports', 'Settings'].map(item => (
-            <div key={item} className="flex items-center px-4 py-2 text-gray-600 hover:bg-gray-100 rounded cursor-pointer">
-              <span className="ml-2">{item}</span>
-            </div>
+          {["Dashboard", "Appointments", "Doctors",  "Certificates"].map((item) => (
+            <Link key={item} to={`/${item.toLowerCase()}`} className="flex items-center px-4 py-2 text-gray-600 hover:bg-gray-100 rounded cursor-pointer">
+              <span className="ml-2 text-lg font-medium">{item}</span>
+            </Link>
           ))}
         </nav>
+
+        {/* New AI Feature Section */}
+        <div className="mt-8">
+          <h3 className="text-lg font-bold text-blue-600 mb-4">AI Feature</h3>
+          <nav className="space-y-2">
+            {["Leave Concern", "Health Record Concern", "AI Diagnosis"].map((item) => (
+              <Link
+                key={item}
+                to={`/${item.toLowerCase().replace(/\s+/g, '-')}`}
+                className="flex items-center px-4 py-2 text-gray-600 hover:bg-gray-100 rounded cursor-pointer"
+              >
+                <span className="ml-2 text-lg font-medium">{item}</span>
+              </Link>
+            ))}
+          </nav>
+        </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 p-8">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold">Overview</h1>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
           <div className="flex items-center space-x-4">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search"
-                className="pl-10 pr-4 py-2 border rounded-lg"
-              />
-              <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
-            </div>
+            <Search className="w-6 h-6 text-gray-400" />
             <Bell className="w-6 h-6 text-gray-400" />
             <Settings className="w-6 h-6 text-gray-400" />
-            <img
-              src="/api/placeholder/32/32"
-              alt="Profile"
-              className="w-8 h-8 rounded-full"
-            />
           </div>
         </div>
 
-        {/* Cards Section */}
+        {/* Action Buttons & History */}
         <div className="grid grid-cols-2 gap-6 mb-8">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-xl text-white">
-            <div className="text-sm mb-2">DOCTOR ID</div>
-            <div className="text-2xl font-bold mb-4">DR-3778 1234</div>
-            <div className="flex justify-between">
-              <div>
-                <div className="text-sm opacity-75">NAME</div>
-                <div>Dr. Edward Smith</div>
+          {[
+            { title: "Health Records", action: "Upload Health Record", color: "bg-blue-600", icon: Upload, history: "Last uploaded: Blood Test Report - 10th March 2025", route: "/recordform" },
+            { title: "Leave Applications", action: "Apply for Leave", color: "bg-green-600", icon: FileText, history: "Last leave applied: 5th March 2025 (Medical Leave)", route: "/leave" },
+            { title: "Appointments", action: "Book Appointment", color: "bg-purple-600", icon: Calendar, history: getNextAppointment(), route: "/appointment" },
+            { title: "AI Diagnosis", action: "AI DIAGNOSIS", color: "bg-yellow-500", icon: MessageCircle, history: "Last query: 'Best home remedies for fever?'", route: "/ai-diagnosis" },
+          ].map((item, index) => (
+            <Link to={item.route} key={index} className="block">
+              <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                <h2 className="text-xl font-semibold mb-4 text-gray-700">{item.title}</h2>
+                <button className={`flex items-center justify-center ${item.color} text-white p-4 rounded-xl shadow-md w-full mb-4 text-lg font-semibold`}>
+                  <item.icon className="mr-2" /> {item.action}
+                </button>
+                <p className="text-gray-800 text-lg font-medium bg-gray-100 p-4 rounded-lg shadow-sm">{item.history}</p>
               </div>
-              <div>
-                <div className="text-sm opacity-75">VALID THRU</div>
-                <div>12/25</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border">
-            <div className="text-sm mb-2">LICENSE ID</div>
-            <div className="text-2xl font-bold mb-4">ML-3778 1234</div>
-            <div className="flex justify-between">
-              <div>
-                <div className="text-sm text-gray-500">NAME</div>
-                <div>Dr. Edward Smith</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500">VALID THRU</div>
-                <div>12/25</div>
-              </div>
-            </div>
-          </div>
+            </Link>
+          ))}
         </div>
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-2 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-xl border">
-            <h2 className="text-lg font-semibold mb-4">Weekly Activity</h2>
-            <BarChart width={500} height={300} data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="patients" fill="#82ca9d" name="Patients" />
-              <Bar dataKey="surgeries" fill="#8884d8" name="Surgeries" />
-            </BarChart>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border">
-            <h2 className="text-lg font-semibold mb-4">Department Statistics</h2>
-            <PieChart width={500} height={300}>
-              <Pie
-                data={departmentData}
-                cx={250}
-                cy={150}
-                innerRadius={60}
-                outerRadius={80}
-                fill="#8884d8"
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {departmentData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+        {/* Student Appointments Section */}
+        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 mb-8">
+          <h2 className="text-lg font-semibold mb-4 text-gray-700">My Appointments</h2>
+          {appointmentsLoading ? (
+            <p>Loading appointments...</p>
+          ) : appointmentsError ? (
+            <p>{appointmentsError}</p>
+          ) : appointments.length > 0 ? (
+            <table className="min-w-full bg-white border border-gray-300 rounded-lg shadow-md">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 border-b text-left">Doctor</th>
+                  <th className="px-4 py-2 border-b text-left">Date & Time</th>
+                  <th className="px-4 py-2 border-b text-left">Status</th>
+                  <th className="px-4 py-2 border-b text-left">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {appointments.map((appointment) => (
+                  <tr key={appointment._id || appointment.id}>
+                    <td className="px-4 py-2 border-b">{appointment.doctorName || appointment.doctor?.name || 'Not specified'}</td>
+                    <td className="px-4 py-2 border-b">{formatDate(appointment.date)}</td>
+                    <td className="px-4 py-2 border-b">
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        appointment.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                        appointment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {appointment.status || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 border-b">{appointment.description || appointment.reason || 'No description'}</td>
+                  </tr>
                 ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </div>
+              </tbody>
+            </table>
+          ) : (
+            <p>No appointments found.</p>
+          )}
         </div>
 
-        {/* Recent Patients */}
-        <div className="bg-white p-6 rounded-xl border">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Recent Patients</h2>
-            <button className="text-blue-600">See All</button>
-          </div>
-          <div className="space-y-4">
-            {recentPatients.map((patient, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-gray-100 rounded-full"></div>
-                  <div>
-                    <div className="font-medium">{patient.name}</div>
-                    <div className="text-sm text-gray-500">{patient.date}</div>
-                  </div>
-                </div>
-                <div className={patient.amount.startsWith('-') ? 'text-red-500' : 'text-green-500'}>
-                  {patient.amount}
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* Health Records Section */}
+        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 mb-8">
+          <h2 className="text-lg font-semibold mb-4 text-gray-700">Health Records</h2>
+          {loading ? (
+            <p>Loading...</p>
+          ) : error ? (
+            <p>{error}</p>
+          ) : healthRecords.length > 0 ? (
+            <table className="min-w-full bg-white border border-gray-300 rounded-lg shadow-md">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2 border-b text-left">ID</th>
+                  <th className="px-4 py-2 border-b text-left">Diagnosis</th>
+                  <th className="px-4 py-2 border-b text-left">Date</th>
+                  <th className="px-4 py-2 border-b text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {healthRecords.map((record) => (
+                  <tr key={record._id}>
+                    <td className="px-4 py-2 border-b">{record._id}</td>
+                    <td className="px-4 py-2 border-b">{record.diagnosis}</td>
+                    <td className="px-4 py-2 border-b">{new Date(record.date).toLocaleDateString()}</td>
+                    <td className="px-4 py-2 border-b">
+                      <button onClick={() => viewHealthRecordDetails(record._id)} className="text-blue-600 hover:underline mr-4">
+                        View
+                      </button>
+                      <button onClick={() => deleteHealthRecord(record._id)} className="text-red-600 hover:underline">
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p>No health records found.</p>
+          )}
         </div>
+
+        {/* Display Selected Record Details */}
+        {selectedRecord && (
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 mb-8">
+            <h2 className="text-lg font-semibold mb-4 text-gray-700">Health Record Details</h2>
+            <p><strong>ID:</strong> {selectedRecord._id}</p>
+            <p><strong>Diagnosis:</strong> {selectedRecord.diagnosis}</p>
+            <p><strong>Date:</strong> {new Date(selectedRecord.date).toLocaleDateString()}</p>
+            <p><strong>Treatment:</strong> {selectedRecord.treatment || "N/A"}</p>
+            <p><strong>Prescription:</strong> {selectedRecord.prescription || "N/A"}</p>
+            <button onClick={() => setSelectedRecord(null)} className="text-red-600 hover:underline">Close</button>
+          </div>
+        )}
       </div>
     </div>
   );

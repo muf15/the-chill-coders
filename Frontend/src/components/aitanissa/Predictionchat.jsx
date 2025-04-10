@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import axios from 'axios';
 
 const Predictionchat = () => {
-  const [studentId, setStudentId] = useState('');
   const [symptoms, setSymptoms] = useState('');
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -55,13 +54,12 @@ const Predictionchat = () => {
       const formattedResponse = res.data;
       setResponse(formattedResponse);
       
-      // Add to chat history
+      // Add to chat history without studentId
       setChatHistory([
         ...chatHistory,
         { 
           type: 'user', 
-          content: `Symptoms: ${symptomsArray.join(', ')}`,
-          studentId: studentId
+          content: `Symptoms: ${symptomsArray.join(', ')}`
         },
         { 
           type: 'ai', 
@@ -80,25 +78,25 @@ const Predictionchat = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-green-50">
+    <div className="flex flex-col min-h-screen bg-green-50">
       {/* Header with gradient */}
       <header className="bg-gradient-to-r from-green-600 to-green-400 text-white p-6 shadow-lg">
-        <div className="max-w-6xl mx-auto flex items-center">
-          <div className="bg-white rounded-full p-2 mr-3">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center">
+          <div className="bg-white rounded-full p-2 mr-0 sm:mr-3 mb-3 sm:mb-0">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
           </div>
-          <div>
+          <div className="text-center sm:text-left">
             <h1 className="text-3xl font-bold tracking-tight">MediPredict AI</h1>
             <p className="text-green-100 text-sm">Advanced Disease Prediction System</p>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden max-w-6xl mx-auto w-full p-4">
+      <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden max-w-6xl mx-auto w-full p-4">
         {/* Chat History */}
-        <div className="flex-1 flex flex-col overflow-hidden mr-0 md:mr-4 mb-4 md:mb-0">
+        <div className="flex-1 flex flex-col overflow-hidden w-full md:w-auto mr-0 md:mr-4 mb-4 md:mb-0">
           <div className="flex-1 bg-white rounded-2xl shadow-xl p-6 overflow-y-auto mb-4 border border-green-100">
             <div className="flex items-center mb-6">
               <div className="h-3 w-3 bg-green-500 rounded-full mr-2"></div>
@@ -113,7 +111,9 @@ const Predictionchat = () => {
                   </svg>
                 </div>
                 <div className="text-lg font-medium text-green-800">No Predictions Yet</div>
-                <p className="text-green-600 max-w-xs mt-2">Enter your symptoms below to get an AI-powered disease prediction</p>
+                <p className="text-green-600 max-w-xs mt-2">
+                  Enter your symptoms below to get an AI-powered disease prediction
+                </p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -129,11 +129,6 @@ const Predictionchat = () => {
                           : 'bg-white border border-green-200 text-gray-800'
                       }`}
                     >
-                      {message.type === 'user' && (
-                        <div className="text-xs text-green-100 mb-1 font-medium">
-                          Student ID: {message.studentId}
-                        </div>
-                      )}
                       {message.type === 'ai' && (
                         <div className="flex items-center mb-2">
                           <div className="bg-green-100 p-1 rounded-full mr-2">
@@ -155,22 +150,6 @@ const Predictionchat = () => {
           {/* Input Form */}
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-4 border border-green-100">
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col md:flex-row items-center gap-2 mb-2">
-                <div className="bg-green-100 p-2 rounded-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  placeholder="Student ID"
-                  className="flex-none w-full md:w-32 px-4 py-3 rounded-xl border border-green-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                  required
-                />
-              </div>
-              
               <div className="flex flex-col md:flex-row gap-2">
                 <input
                   type="text"
@@ -183,7 +162,7 @@ const Predictionchat = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-medium py-3 px-6 rounded-xl shadow-md disabled:opacity-70 transition-all duration-200 transform hover:scale-105"
+                  className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-medium py-2 px-4 rounded-xl shadow-md disabled:opacity-70 transition-all duration-200 transform hover:scale-105"
                 >
                   {loading ? (
                     <div className="flex items-center">
@@ -243,7 +222,9 @@ const Predictionchat = () => {
                 </svg>
               </div>
               <div className="text-lg font-medium text-green-800">No Results Yet</div>
-              <p className="text-green-600 max-w-xs mt-2">Submit your symptoms to see a detailed prediction analysis here</p>
+              <p className="text-green-600 max-w-xs mt-2">
+                Submit your symptoms to see a detailed prediction analysis here
+              </p>
             </div>
           )}
 

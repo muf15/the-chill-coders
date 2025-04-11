@@ -8,6 +8,7 @@ import cors from "cors";
 import jwt from "jsonwebtoken";
 import connectDB from "./db/database.js";
 import Routes from "./routes/index.js";
+import testRoutes from "./routes/testRoutes.js";
 
 
 const app = express();
@@ -23,6 +24,8 @@ app.use(
   })
 );
 app.use("/api/v1", Routes);
+
+
 
 // Create an HTTP server and integrate with Socket.io
 const server = http.createServer(app);

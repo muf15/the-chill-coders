@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { UserProvider } from "./context/UserContext";
 import Navbar from "../src/components/Navbar/Navbar";
 import socket from "./socket";
+import { showAlert } from "./components/alert-system.js";
+
 
 import HomePage from "./Pages/HomePage";
 import PatientForm from "./Pages/PatientForm";
@@ -34,6 +36,8 @@ import Healthchat from "./components/aitanissa/Healthchat";
 import Noti from "./Pages/Noti";
 import Payments from "./components/Payments/payment";
 import NotiScreen from "./components/Noti/NotiScreen";
+import Voice from "./components/Voice Assistant/Voice";
+import Notibell from "./components/Noti/Notibell";
 const Home = () => <div className="text-center mt-10">🏠 Welcome to Home</div>;
 const AIBot = () => <div className="text-center mt-10">🤖 AI Bot Page</div>;
 
@@ -41,27 +45,22 @@ const Appointment = () => <div className="text-center mt-10">📅 Appointment Pa
 
 const App = () => {
   useEffect(() => {
-    // socket.on("connect", () => {
-    //   console.log("WebSocket Connected:", socket.id);
-    // });
-
-    // socket.on("disconnect", () => {
-    //   console.log("WebSocket Disconnected");
-    // });
+    
 
     socket.on("newAppointment", (data) => {
       console.log(" New Appointment Notification:", data);
-      alert(" You have a new appointment request!");
+      showAlert( `Patient ${data.appointment.studentId.name} has requested an appointment!`,
+         "custom", 5000);
+         
     });
 
     socket.on("appointmentUpdate", (data) => {
       console.log("Appointment Update:", data);
-      alert(`Your appointment has been ${data.appointment.status}`);
+      const doctorName = data.appointment?.doctorName;
+      showAlert(`Dr. ${doctorName} has ${data.appointment.status} your appointment.`, "custom", 5000);
     });
 
     return () => {
-      // socket.off("connect");
-      // socket.off("disconnect");
       socket.off("newAppointment");
       socket.off("appointmentUpdate");
     };
@@ -100,6 +99,8 @@ const App = () => {
         <Route path="/noti" element={<Noti />} />
         <Route path="/payment" element={<Payments />} />
         <Route path="/notiscreen" element={<NotiScreen />} />
+        <Route path="/voice" element={<Voice/>} />
+        <Route path="/bell" element={<Notibell/>} />
 
        
       </Routes>

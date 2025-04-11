@@ -1,6 +1,7 @@
 // medicalLeaveController.js
 import { MedicalLeave } from "../models/medicalLeaveModel.js";
 import { User } from "../models/index.js";
+import { Notification } from "../models/notificationModel.js";
 
 import { uploadMultipleDocuments } from "../utils/cloudinary.js";
 import { HealthRecord } from "../models/healthRecordModel.js";
@@ -34,7 +35,8 @@ export const applyMedicalLeave = async (req, res) => {
         });
       });
     }
-    
+    const student = await User.findById(req.user.id).select("name");
+
     // Create the medical leave request with all form data
     const leaveRequest = await MedicalLeave.create({
       studentId: req.user.id,
@@ -45,26 +47,76 @@ export const applyMedicalLeave = async (req, res) => {
       supportingDocuments,
       status: "pending",
     });
+    const fullLeave = await MedicalLeave.findById(leaveRequest._id)
+  .populate("studentId", "name gender studentId") // Include name, gender, roll number
+  .populate({
+    path: "healthRecordId",
+    select: "diagnosis date doctorId isManualUpload externalDoctorName",
+    populate: {
+      path: "doctorId",
+      select: "name"
+    }
+  });
+    console.log("full leave :",fullLeave);
+
 
     // Emit real-time notification to ALL online admins
     const io = req.app.get("socketio");
     const onlineUsers = req.app.get("onlineUsers");
-
+    //save in mongo db
+    const studentNotification = await Notification.create({
+      recipientId: req.user.id, 
+      type: "leave",
+      message: "Your leave request has been submitted successfully.",
+    });
+    
     // Find all admins and notify them 
     onlineUsers.forEach(async(socket, userId) => {
       const user = await User.findById(userId);
       if (user && user.role =="admin") {
         console.log("Informing admin about the leave application");
-        socket.emit("newLeaveRequest", {
-          message: "A student has applied for medical leave!",
-          leaveRequest,
+
+      
+        const savedNotification = await Notification.create({
+          recipientId: user._id,
+          type: "leave",
+          message: `Student ${student.name} has applied for medical leave!`,
         });
+        
+        socket.emit("newLeaveNotification", {
+          notification: savedNotification,
+          leave: {
+            // ...leaveRequest.toObject(),
+            // studentName: student.name,
+            _id: fullLeave._id,
+            id: fullLeave._id,
+            reason: fullLeave.reason,
+            fromDate: fullLeave.fromDate.toISOString().split("T")[0],
+            toDate: fullLeave.toDate.toISOString().split("T")[0],
+            diagnosis: fullLeave.healthRecordId?.diagnosis || "N/A",
+            date: fullLeave.healthRecordId?.date?.toISOString().split("T")[0] || "N/A",
+            doctorName: fullLeave.healthRecordId?.isManualUpload
+            ? fullLeave.healthRecordId?.externalDoctorName || "N/A"
+            : fullLeave.healthRecordId?.doctorId?.name || "N/A",
+            status: fullLeave.status,
+            studentName: fullLeave.studentId?.name || "N/A",
+            studentId: fullLeave.studentId?._id || "N/A", // Student Roll No
+            gender: fullLeave.studentId?.gender || "N/A",
+            
+            duration: `${fullLeave.fromDate.toISOString().split("T")[0]} to ${fullLeave.toDate.toISOString().split("T")[0]}`
+          },
+        
+        });
+
       }
     });
 
     res.status(201).json({ 
       message: "Medical leave applied", 
-      leaveRequest 
+      leaveRequest: {
+        ...leaveRequest.toObject(), 
+        studentName: student.name, 
+      }
     });
   } catch (error) {
     console.error("Error applying for leave:", error);

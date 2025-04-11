@@ -1,6 +1,9 @@
 import { MedicalLeave } from "../models/medicalLeaveModel.js";
 import { User } from "../models/userModel.js";
 import { HealthRecord } from "../models/healthRecordModel.js";
+import{Notification} from "../models/notificationModel.js"
+
+import sendMail from "../utils/mailer.js";
 
 export const getMedicalLeaveApplications = async (req, res) => {
     try {
@@ -33,9 +36,14 @@ export const updateLeaveStatus = async (req, res) => {
       const { status } = req.body; // 'approved' or 'rejected'
   
       if (!["approved", "rejected"].includes(status)) {
+        console.log("invalid status recieved ")
         return res.status(400).json({ message: "Invalid status" });
       }
-  
+      console.log("Admin User:", req.user);
+      if (!req.user || !req.user.id) {
+        return res.status(401).json({ message: "Unauthorized: Admin ID missing" });
+      }
+
       const leave = await MedicalLeave.findByIdAndUpdate(
         id,
         { status, approvedBy: req.user.id }, // Assuming `req.user.id` contains admin ID
@@ -44,17 +52,58 @@ export const updateLeaveStatus = async (req, res) => {
   
       if (!leave) {
         return res.status(404).json({ message: "Medical leave not found" });
+        console.log("leave not found");
       }
-
+      console.log("request updated");
+      //store in mongodb
+      const notification = await Notification.create({
+        recipientId: leave.studentId,
+        type: "leave",
+        message: `Your leave request has been ${status}.`,
+      });
+      console.log("stored in db");
       const io = req.app.get("socketio"); // Get Socket.io instance
       const studentSocket = req.app.get("onlineUsers").get(leave.studentId.toString());
 
       if (studentSocket) {
         console.log("informing patient about the leave application status");
-        studentSocket.emit("leaveStatusUpdate", { message: `Your leave request is ${status}.`,leave });
+        // studentSocket.emit("leaveStatusUpdate", { message:notification.message,leave });
+        studentSocket.emit("newNotification", {
+          notification, leave,
+        });
+  
+
       }
       else {
         console.log(`Student ${leave.studentId} is offline.`);
+      }
+
+      //sending mail 
+      try {
+        const studentDetails = await User.findById(leave.studentId).select("name email");
+        if (studentDetails?.email) {
+          const mailSubject = `📝 Medical Leave ${status}`;
+          const mailText = `Your medical leave request has been ${status}.`;
+          const mailHtml = `
+            <h3>Medical Leave Status Update</h3>
+            <p><strong>Student:</strong> ${studentDetails.name}</p>
+            <p><strong>Status:</strong> <span style="text-transform: capitalize;">${status}</span></p>
+            <p>Your medical leave request has been <strong>${status}</strong>.</p>
+          `;
+  
+          await sendMail(
+            studentDetails.email,
+            mailSubject,
+            mailText,
+            mailHtml
+          );
+  
+          console.log("✅ Email sent to student:", studentDetails.email);
+        } else {
+          console.log("❌ Student email not found.");
+        }
+      } catch (emailError) {
+        console.error("❌ Error sending email to student:", emailError);
       }
 
   
@@ -120,5 +169,111 @@ export const updateLeaveStatus = async (req, res) => {
         res.status(200).json(detailedLeave);
       } catch (error) {
         res.status(500).json({ message: error.message });
+      }
+    };
+
+
+    export const adminSearchHealthRecords = async (req, res) => {
+      try {
+        const { query } = req.query;
+        console.log("Admin search query:", query);
+        
+        // Create the base query conditions
+        const searchConditions = [
+          { diagnosis: { $regex: query, $options: "i" } },
+          { treatment: { $regex: query, $options: "i" } },
+          { prescription: { $regex: query, $options: "i" } },
+          { externalDoctorName: { $regex: query, $options: "i" } },
+          { externalHospitalName: { $regex: query, $options: "i" } }
+        ];
+        
+        // Find users (both students and doctors) that match the query
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: query, $options: "i" } },
+            { specialization: { $regex: query, $options: "i" } }
+          ]
+        });
+        
+        // Extract IDs of matching users based on their role
+        const studentIds = matchingUsers
+          .filter(user => user.role === "student")
+          .map(student => student._id);
+        
+        const doctorIds = matchingUsers
+          .filter(user => user.role === "doctor")
+          .map(doctor => doctor._id);
+        
+        // Add user IDs to search conditions if any were found
+        if (studentIds.length > 0) {
+          searchConditions.push({ studentId: { $in: studentIds } });
+        }
+        
+        if (doctorIds.length > 0) {
+          searchConditions.push({ doctorId: { $in: doctorIds } });
+        }
+        
+        // Execute the search with all conditions
+        const records = await HealthRecord.find({
+          $or: searchConditions
+        })
+          .populate("studentId", "name")
+          .populate("doctorId", "name specialization");
+        
+        console.log("Admin search - Records found:", records.length);
+        res.status(200).json(records);
+      } catch (error) {
+        console.error("Error in admin search for health records:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+      }
+    };
+    
+    export const adminGetSearchSuggestions = async (req, res) => {
+      try {
+        const { query } = req.query;
+        
+        if (!query) {
+          return res.status(400).json({ message: "Query parameter is required" });
+        }
+        
+        // Get suggestions from health records
+        const recordSuggestions = await HealthRecord.find({
+          $or: [
+            { diagnosis: { $regex: query, $options: "i" } },
+            { treatment: { $regex: query, $options: "i" } },
+            { prescription: { $regex: query, $options: "i" } },
+            { externalDoctorName: { $regex: query, $options: "i" } },
+            { externalHospitalName: { $regex: query, $options: "i" } }
+          ]
+        }).limit(5);
+        
+        // Get suggestions from users (students and doctors)
+        const userSuggestions = await User.find({
+          $or: [
+            { name: { $regex: query, $options: "i" } },
+            { specialization: { $regex: query, $options: "i" } }
+          ]
+        }).limit(5);
+        
+        // Combine and deduplicate suggestions
+        const diagnosisSuggestions = [...new Set(recordSuggestions.map(r => r.diagnosis))];
+        const nameSuggestions = [...new Set(userSuggestions.map(u => u.name))];
+        const specializationSuggestions = [...new Set(
+          userSuggestions
+            .filter(u => u.role === "doctor" && u.specialization)
+            .map(d => d.specialization)
+        )];
+        
+        // Combine all suggestion types
+        const allSuggestions = [
+          ...diagnosisSuggestions,
+          ...nameSuggestions,
+          ...specializationSuggestions
+        ].filter(Boolean).slice(0, 10); // Take top 10 non-null suggestions
+        
+        res.status(200).json(allSuggestions);
+      } catch (error) {
+        console.error("Error fetching admin search suggestions:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
       }
     };

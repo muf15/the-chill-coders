@@ -2,8 +2,9 @@ import {
   Appointment,
   HealthRecord,
   MedicalLeave,
-  User,
+  User,Notification
 } from "../models/index.js";
+import sendMail from "../utils/mailer.js";
 import { uploadDocument } from "../utils/cloudinary.js";
 import fs from "fs";
 
@@ -33,7 +34,7 @@ export const updateAppointmentStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status update." });
     }
 
-    const appointment = await Appointment.findById(id);
+    const appointment = await Appointment.findById(id).populate("doctorId","name");
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found." });
@@ -84,6 +85,14 @@ export const updateAppointmentStatus = async (req, res) => {
       }
     }
 
+    //Saving in mongodb
+    const notification = await Notification.create({
+      recipientId: studentId,  
+      type: "appointment",
+      message: `Your appointment has been ${status}`,
+    });
+    
+
      // 🔹 Integrate Socket.io
      const io = req.app.get("socketio");
      const onlineUsers = req.app.get("onlineUsers"); // ✅ Get the online users Map
@@ -107,11 +116,46 @@ export const updateAppointmentStatus = async (req, res) => {
       // }
       // Emit real-time notification to patient
       patientSocket.emit("appointmentUpdate", {
-        message: `Your appointment has been ${status}`,
-        appointment,
+        message: notification.message,
+        appointment: {
+          ...appointment.toObject(), 
+          doctorName: appointment.doctorId.name, // Extract doctor’s name
+        },
+      });
+      patientSocket.emit("newNotification", {
+        notification,
       });
     } else {
-      console.log(`❌ Patient ${studentId} is offline. Cannot send update.`);
+      console.log(`Patient ${studentId} is offline. Cannot send update.`);
+    }
+
+    //sending mail 
+    try {
+      const studentDetails = await User.findById(studentId).select("name email");
+      if (studentDetails?.email) {
+        const mailSubject = `📅 Appointment ${status}`;
+        const mailText = `Your appointment with Dr. ${appointment.doctorId.name} on ${slotDateTime} has been ${status}.`;
+        const mailHtml = `
+          <h3>Appointment ${status}</h3>
+          <p><strong>Doctor:</strong> Dr. ${appointment.doctorId.name}</p>
+          <p><strong>Date & Time:</strong> ${slotDateTime}</p>
+          <p>Your appointment has been <strong>${status}</strong>.</p>
+        `;
+
+        console.log(`Sending email to student: ${studentDetails.email}`);
+        await sendMail(
+          studentDetails.email,
+          mailSubject,
+          mailText,
+          mailHtml
+        );
+
+        console.log("✅ Email sent to student:", studentDetails.email);
+      } else {
+        console.log("❌ Student email not found.");
+      }
+    } catch (emailError) {
+      console.error("❌ Error sending email to student:", emailError);
     }
 
     res.status(200).json({ message: `Appointment ${status} successfully.` });

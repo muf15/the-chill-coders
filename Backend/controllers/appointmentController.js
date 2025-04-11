@@ -1,4 +1,5 @@
-import { User, Appointment } from "../models/index.js";
+import { User, Appointment,Notification } from "../models/index.js";
+import sendMail from "../utils/mailer.js";
 
 export const bookAppointment = async (req, res) => {
   try {
@@ -49,6 +50,20 @@ export const bookAppointment = async (req, res) => {
 
     await appointment.save();
 
+    const doctorDetails = await User.findById(doctorId).select("name email");
+    const studentDetails = await User.findById(studentId).select("name");
+    
+   
+
+    //storing in db 
+    const notification = await Notification.create({
+      recipientId: doctorId,
+      type: "appointment",
+      message:`📅 You have a new appointment request from ${studentDetails.name}!`
+    });
+
+    console.log("✅ SAVED NOTIFICATION:", notification);
+
     //Notify the doc in realtime
     const io = req.app.get("socketio"); 
     const onlineUsers = req.app.get("onlineUsers"); // Get the online users Map
@@ -57,13 +72,50 @@ export const bookAppointment = async (req, res) => {
       const doctorSocket = onlineUsers.get(doctorId.toString());
       console.log(`Sending notification to doctor ${doctorId}`);
       doctorSocket.emit("newAppointment", {
-        message: "📅 You have a new appointment request!",
-        appointment,
+        message:  `📅 ${studentDetails.name} has requested an appointment!`,
+        appointment: {
+          ...appointment.toObject(),
+          doctorId: {
+            _id: doctorDetails._id,
+            name: doctorDetails.name,
+          },
+          studentId: {
+            _id: studentDetails._id,
+            name: studentDetails.name,
+          },
+        },
+        
       });
+      doctorSocket.emit("newNotification", {
+        notification,
+      });
+      
     }
-      // } else {
-      //   console.log(`Doctor ${doctorId} is offline.`);
-      // }
+
+   
+    try {
+      const mailSubject = "📅 New Appointment Request";
+      const mailText = `You have a new appointment request from ${studentDetails.name} on ${slotDateTime}.`;
+      const mailHtml = `
+        <h3>New Appointment Request</h3>
+        <p><strong>Student:</strong> ${studentDetails.name}</p>
+        <p><strong>Date & Time:</strong> ${slotDateTime}</p>
+        <p>Please log in to your dashboard to confirm or cancel this appointment.</p>
+      `;
+      console.log(`...mail ....`,doctorDetails.email);
+      await sendMail(
+         doctorDetails.email,
+          mailSubject,
+         mailText,
+         mailHtml,
+      );
+
+      console.log("✅ Email sent to doctor:", doctorDetails.email);
+    } catch (emailError) {
+      console.error("❌ Error sending email:", emailError);
+    }
+
+
     
 
     res.status(201).json({ message: "Appointment booked successfully.", appointment });
